@@ -1,0 +1,5 @@
+[ownership_of_search]
+path = "^\/search"
+ignore_authors = ["timglabisch"]
+ignore_branches = ["^foo\/"]
+code = ["date\(", "new Date"]
