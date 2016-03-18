@@ -3,13 +3,15 @@ extern crate git2;
 use git2::Repository;
 use git2::DiffFormat;
 use git2::DiffOptions;
+use git2::Oid;
+use git2::Reference;
 use std::str;
 use std::collections::HashMap;
 
 
 fn main() {
 
-    let mut found_commits = HashMap::new();
+    let mut commitMap = HashMap::new();
 
     let repo = match Repository::open("./") {
         Ok(repo) => repo,
@@ -27,22 +29,46 @@ fn main() {
 
         println!("{}", branch_name);
 
-
         let reference = branch.0.get();
-
-        println!("{}", reference.name().unwrap());
 
         let oid = reference.target().unwrap();
 
-        println!("{}", oid);
+        addCommitToCommitMapByReference(oid.clone(), &mut commitMap, branch_name, &repo);
+    }
 
-        let commit = repo.find_commit(oid).unwrap();
+    analyzeCommits(&commitMap, &repo);
 
-        if !found_commits.contains_key(&oid) {
-            found_commits.insert(oid, vec![branch_name.clone()]);
-        } else {
-            found_commits.get_mut(&oid).unwrap().push(branch_name.clone());
-        }
+    println!("Hello, world!");
+}
+
+fn addCommitToCommitMapByReference(
+    oid : Oid,
+    commitMap : &mut HashMap<Oid, Vec<String>>,
+    branch_name : String,
+    repo : &Repository
+)
+{
+
+    if !commitMap.contains_key(&oid) {
+        commitMap.insert(oid, vec![branch_name.clone()]);
+    } else {
+        commitMap.get_mut(&oid).unwrap().push(branch_name.clone());
+    }
+
+    let commit = repo.find_commit(oid.clone()).unwrap();
+
+    for pid in commit.parent_ids() {
+        addCommitToCommitMapByReference(pid.clone(), commitMap, branch_name.clone(), &repo);
+    }
+
+
+}
+
+fn analyzeCommits(commitMap : &HashMap<Oid, Vec<String>>, repo : &Repository)
+{
+    for (oid, branches) in commitMap {
+
+        let commit = repo.find_commit(oid.clone()).unwrap();
 
         println!("{}", commit.message().unwrap());
 
@@ -65,6 +91,4 @@ fn main() {
             true
         });
     }
-
-    println!("Hello, world!");
 }
