@@ -1,5 +1,7 @@
 extern crate git2;
 
+mod rule;
+
 use git2::Repository;
 use git2::DiffFormat;
 use git2::DiffOptions;
@@ -7,9 +9,18 @@ use git2::Oid;
 use git2::Reference;
 use std::str;
 use std::collections::HashMap;
+use rule::Rule;
 
 
 fn main() {
+
+    let r = Rule::new(
+        "foo".to_string(),
+        "foo".to_string(),
+        vec!("foo".to_string()),
+        vec!("foo".to_string()),
+        vec!("foo".to_string()),
+    );
 
     let mut commitMap = HashMap::new();
 
@@ -80,11 +91,12 @@ fn analyzeCommits(commitMap : &HashMap<Oid, Vec<String>>, repo : &Repository)
                 Some(&mut diffopts)
             ).unwrap();
 
-            diff.print(DiffFormat::Patch, |_delta, _hunk, line| {
+            diff.print(DiffFormat::Patch, |delta, _hunk, line| {
                 match line.origin() {
                     '+' => {
-                        print!("{}", line.origin());
-                        print!("{}", str::from_utf8(line.content()).unwrap());
+                        print!("{}", delta.new_file().path().unwrap().to_string_lossy());
+                        print!("\t{}", line.origin());
+                        print!("\t{}", str::from_utf8(line.content()).unwrap());
                     },
                     ' ' | '-' => {},
                     _ => {}

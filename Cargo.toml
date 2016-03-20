@@ -5,3 +5,4 @@ authors = ["timglabisch <tim@ainfach.de>"]
 
 [dependencies]
 git2 = "0.4.2"
+toml = "0.1"
