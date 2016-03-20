@@ -1,4 +1,5 @@
 extern crate git2;
+extern crate toml;
 
 mod rule;
 
@@ -9,18 +10,12 @@ use git2::Oid;
 use git2::Reference;
 use std::str;
 use std::collections::HashMap;
-use rule::Rule;
+use rule::from_toml;
 
 
 fn main() {
 
-    let r = Rule::new(
-        "foo".to_string(),
-        "foo".to_string(),
-        vec!("foo".to_string()),
-        vec!("foo".to_string()),
-        vec!("foo".to_string()),
-    );
+    let rules = from_toml();
 
     let mut commitMap = HashMap::new();
 
