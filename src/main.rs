@@ -72,23 +72,25 @@ fn analyzeCommits(commitMap : &HashMap<Oid, Vec<String>>, repo : &Repository)
 
         println!("{}", commit.message().unwrap());
 
-        let a = commit.tree().unwrap();
-        let b = if commit.parents().len() == 1 {
-            let parent = commit.parent(0).unwrap();
-            parent.tree().unwrap()
-        } else {
-            panic!("b is wrong");
-        };
+        for parent in commit.parents() {
+            let mut diffopts = DiffOptions::new();
+            let diff = repo.diff_tree_to_tree(
+                Some(&commit.tree().unwrap()),
+                Some(&parent.tree().unwrap()),
+                Some(&mut diffopts)
+            ).unwrap();
 
-        let mut diffopts = DiffOptions::new();
-        let diff = repo.diff_tree_to_tree(Some(&a), Some(&b), Some(&mut diffopts)).unwrap();
-        diff.print(DiffFormat::Patch, |_delta, _hunk, line| {
-            match line.origin() {
-                ' ' | '+' | '-' => print!("{}", line.origin()),
-                _ => {}
-            }
-            print!("{}", str::from_utf8(line.content()).unwrap());
-            true
-        });
+            diff.print(DiffFormat::Patch, |_delta, _hunk, line| {
+                match line.origin() {
+                    '+' => {
+                        print!("{}", line.origin());
+                        print!("{}", str::from_utf8(line.content()).unwrap());
+                    },
+                    ' ' | '-' => {},
+                    _ => {}
+                }
+                true
+            });
+        }
     }
 }
