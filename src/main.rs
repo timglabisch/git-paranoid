@@ -75,8 +75,8 @@ fn analyzeCommits(commitMap : &HashMap<Oid, Vec<String>>, repo : &Repository)
         for parent in commit.parents() {
             let mut diffopts = DiffOptions::new();
             let diff = repo.diff_tree_to_tree(
-                Some(&commit.tree().unwrap()),
                 Some(&parent.tree().unwrap()),
+                Some(&commit.tree().unwrap()),
                 Some(&mut diffopts)
             ).unwrap();
 
