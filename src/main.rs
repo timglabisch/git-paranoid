@@ -1,5 +1,6 @@
 extern crate git2;
 extern crate toml;
+extern crate regex;
 
 mod rule;
 
@@ -10,6 +11,7 @@ use git2::Oid;
 use git2::Reference;
 use std::str;
 use std::collections::HashMap;
+use rule::Rule;
 use rule::from_toml;
 
 
@@ -33,8 +35,6 @@ fn main() {
         let branch = b.unwrap();
         let branch_name = branch.0.name().unwrap().unwrap().to_string();
 
-        println!("{}", branch_name);
-
         let reference = branch.0.get();
 
         let oid = reference.target().unwrap();
@@ -42,9 +42,9 @@ fn main() {
         addCommitToCommitMapByReference(oid.clone(), &mut commitMap, branch_name, &repo);
     }
 
-    analyzeCommits(&commitMap, &repo);
+    analyzeCommits(&rules, &commitMap, &repo);
 
-    println!("Hello, world!");
+
 }
 
 fn addCommitToCommitMapByReference(
@@ -70,13 +70,14 @@ fn addCommitToCommitMapByReference(
 
 }
 
-fn analyzeCommits(commitMap : &HashMap<Oid, Vec<String>>, repo : &Repository)
+fn analyzeCommits(rules : &Vec<Rule>, commitMap : &HashMap<Oid, Vec<String>>, repo : &Repository)
 {
     for (oid, branches) in commitMap {
 
         let commit = repo.find_commit(oid.clone()).unwrap();
+        let mut rule_matched = false;
 
-        println!("{}", commit.message().unwrap());
+        // println!("{}", commit.message().unwrap());
 
         for parent in commit.parents() {
             let mut diffopts = DiffOptions::new();
@@ -89,15 +90,33 @@ fn analyzeCommits(commitMap : &HashMap<Oid, Vec<String>>, repo : &Repository)
             diff.print(DiffFormat::Patch, |delta, _hunk, line| {
                 match line.origin() {
                     '+' => {
-                        print!("{}", delta.new_file().path().unwrap().to_string_lossy());
-                        print!("\t{}", line.origin());
-                        print!("\t{}", str::from_utf8(line.content()).unwrap());
+                        //print!("{}", delta.new_file().path().unwrap().to_string_lossy());
+                        //print!("\t{}", line.origin());
+                        //print!("\t{}", str::from_utf8(line.content()).unwrap());
+
+                        for rule in rules {
+                            for branch in branches {
+                                if rule.statify(
+                                    delta.new_file().path().unwrap().to_string_lossy().to_string(),
+                                    str::from_utf8(line.content()).unwrap().to_string(),
+                                    "author".to_string(),
+                                    branch.to_string()
+                                ) {
+                                    rule_matched = true;
+                                    break;
+                                }
+                            }
+                        }
                     },
                     ' ' | '-' => {},
                     _ => {}
                 }
                 true
             });
+        }
+
+        if rule_matched {
+            println!("take a deeper look at commit {}", commit.id());
         }
     }
 }

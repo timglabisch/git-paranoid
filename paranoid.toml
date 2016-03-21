@@ -1,5 +1,5 @@
 [ownership_of_search]
-path = '^\/search'
-code = ['date\(', 'new Date']
+path = '.*'
+code = ['rule']
 ignore_authors = ['timglabisch']
-ignore_branches = ['^foo\/']
+ignore_branches = ['foo']
