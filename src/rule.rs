@@ -15,22 +15,22 @@ pub fn from_toml() -> Vec<Rule> {
         )
     ).unwrap().read_to_string(&mut file_content).unwrap();
 
-    let tomlRules = Parser::new(
+    let toml_rules = Parser::new(
         &file_content
     ).parse().expect("Wrong TOML");
 
 
     let mut buffer = vec![];
 
-    for (key, subtable) in tomlRules.iter() {
+    for (key, subtable) in toml_rules.iter() {
 
         buffer.push(
             Rule::new(
                 key.to_string(),
                 subtable.lookup("path").expect("path is not given").as_str().expect("path must be a string").to_string(),
-                extractValuesFromTable(subtable.lookup("code").expect("code is not given")),
-                extractValuesFromTable(subtable.lookup("ignore_authors").expect("ignore_authors is not given")),
-                extractValuesFromTable(subtable.lookup("ignore_branches").expect("ignore_branches is not given")),
+                extract_values_from_table(subtable.lookup("code").expect("code is not given")),
+                extract_values_from_table(subtable.lookup("ignore_authors").expect("ignore_authors is not given")),
+                extract_values_from_table(subtable.lookup("ignore_branches").expect("ignore_branches is not given")),
             )
         );
     }
@@ -38,7 +38,7 @@ pub fn from_toml() -> Vec<Rule> {
     buffer
 }
 
-fn extractValuesFromTable(arr : &Value) -> Vec<String> {
+fn extract_values_from_table(arr : &Value) -> Vec<String> {
     match arr {
         &Value::Array(ref vs) => {
             let mut buffer = Vec::new();
@@ -54,7 +54,7 @@ fn extractValuesFromTable(arr : &Value) -> Vec<String> {
 
 #[derive(Debug)]
 pub struct Rule {
-    name: Regex,
+    name: String,
     path: Regex,
     code: Vec<Regex>,
     ignore_authors: Vec<Regex>,
@@ -70,7 +70,7 @@ impl Rule {
         ignore_branches: Vec<String>
     ) -> Rule {
         Rule {
-            name: Regex::new(&name).expect("name is not a valid regex"),
+            name: name,
             path: Regex::new(&path).expect("path is not a valid regex"),
             code: Rule::regex_from_array(code),
             ignore_authors: Rule::regex_from_array(ignore_authors),
@@ -86,6 +86,10 @@ impl Rule {
         }
 
         buffer
+    }
+
+    pub fn get_name(&self) -> String {
+        self.name.clone()
     }
 
     pub fn statify(

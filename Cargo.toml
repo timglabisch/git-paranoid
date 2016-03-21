@@ -7,3 +7,4 @@ authors = ["timglabisch <tim@ainfach.de>"]
 git2 = "0.4.2"
 toml = "0.1"
 regex = "0.1"
+ansi_term = "0.7"

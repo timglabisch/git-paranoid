@@ -1,34 +1,33 @@
 extern crate git2;
 extern crate toml;
 extern crate regex;
+extern crate ansi_term;
 
 mod rule;
+mod violation;
 
 use git2::Repository;
 use git2::DiffFormat;
 use git2::DiffOptions;
 use git2::Oid;
-use git2::Reference;
 use std::str;
 use std::collections::HashMap;
 use rule::Rule;
 use rule::from_toml;
+use violation::Violation;
+use ansi_term::Colour;
 
 
 fn main() {
 
     let rules = from_toml();
 
-    let mut commitMap = HashMap::new();
+    let mut commit_map = HashMap::new();
 
     let repo = match Repository::open("./") {
         Ok(repo) => repo,
         Err(e) => panic!("failed to open: {}", e),
     };
-
-    // 1. collect commit id's to analyze and save it's branches
-    // 2. analyze commits
-    // toml
 
     for b in repo.branches(None).unwrap() {
 
@@ -39,45 +38,55 @@ fn main() {
 
         let oid = reference.target().unwrap();
 
-        addCommitToCommitMapByReference(oid.clone(), &mut commitMap, branch_name, &repo);
+        add_commit_to_commit_map_by_reference(oid.clone(), &mut commit_map, branch_name, &repo);
     }
 
-    analyzeCommits(&rules, &commitMap, &repo);
+    let violations = analyze_commits(&rules, &commit_map, &repo);
 
+    for violation in violations {
+        println!(
+            "[{}] violates in {} on branch {}",
+            Colour::Red.bold().paint(violation.get_rule_name()),
+            Colour::Red.bold().paint(
+                format!("{}", violation.get_oid())
+            ),
+            commit_map.get(&violation.get_oid()).unwrap().join(",")
+        );
+
+        println!("{}", violation.get_line());
+        println!("{}", "");
+    }
 
 }
 
-fn addCommitToCommitMapByReference(
+fn add_commit_to_commit_map_by_reference(
     oid : Oid,
-    commitMap : &mut HashMap<Oid, Vec<String>>,
+    commit_map : &mut HashMap<Oid, Vec<String>>,
     branch_name : String,
     repo : &Repository
 )
 {
 
-    if !commitMap.contains_key(&oid) {
-        commitMap.insert(oid, vec![branch_name.clone()]);
+    if !commit_map.contains_key(&oid) {
+        commit_map.insert(oid, vec![branch_name.clone()]);
     } else {
-        commitMap.get_mut(&oid).unwrap().push(branch_name.clone());
+        commit_map.get_mut(&oid).unwrap().push(branch_name.clone());
     }
 
     let commit = repo.find_commit(oid.clone()).unwrap();
 
     for pid in commit.parent_ids() {
-        addCommitToCommitMapByReference(pid.clone(), commitMap, branch_name.clone(), &repo);
+        add_commit_to_commit_map_by_reference(pid.clone(), commit_map, branch_name.clone(), &repo);
     }
-
-
 }
 
-fn analyzeCommits(rules : &Vec<Rule>, commitMap : &HashMap<Oid, Vec<String>>, repo : &Repository)
+fn analyze_commits(rules : &Vec<Rule>, commit_map : &HashMap<Oid, Vec<String>>, repo : &Repository) -> Vec<Violation>
 {
-    for (oid, branches) in commitMap {
+    let mut violations = vec![];
+
+    for (oid, branches) in commit_map {
 
         let commit = repo.find_commit(oid.clone()).unwrap();
-        let mut rule_matched = false;
-
-        // println!("{}", commit.message().unwrap());
 
         for parent in commit.parents() {
             let mut diffopts = DiffOptions::new();
@@ -87,36 +96,34 @@ fn analyzeCommits(rules : &Vec<Rule>, commitMap : &HashMap<Oid, Vec<String>>, re
                 Some(&mut diffopts)
             ).unwrap();
 
-            diff.print(DiffFormat::Patch, |delta, _hunk, line| {
-                match line.origin() {
-                    '+' => {
-                        //print!("{}", delta.new_file().path().unwrap().to_string_lossy());
-                        //print!("\t{}", line.origin());
-                        //print!("\t{}", str::from_utf8(line.content()).unwrap());
-
-                        for rule in rules {
-                            for branch in branches {
-                                if rule.statify(
-                                    delta.new_file().path().unwrap().to_string_lossy().to_string(),
-                                    str::from_utf8(line.content()).unwrap().to_string(),
-                                    "author".to_string(),
-                                    branch.to_string()
-                                ) {
-                                    rule_matched = true;
-                                    break;
-                                }
-                            }
-                        }
-                    },
-                    ' ' | '-' => {},
-                    _ => {}
+            let _ = diff.print(DiffFormat::Patch, |delta, _hunk, line| {
+                if line.origin() == '+' {
+                    return true;
                 }
+
+                for rule in rules {
+                    for branch in branches {
+                        if rule.statify(
+                            delta.new_file().path().unwrap().to_string_lossy().to_string(),
+                            str::from_utf8(line.content()).unwrap().to_string(),
+                            "author".to_string(),
+                            branch.to_string()
+                        ) {
+                            violations.push(
+                                Violation::new(
+                                    rule.get_name(),
+                                    oid.clone(),
+                                    str::from_utf8(line.content()).unwrap().to_string()
+                                )
+                            )
+                        }
+                    }
+                }
+
                 true
             });
         }
-
-        if rule_matched {
-            println!("take a deeper look at commit {}", commit.id());
-        }
     }
+
+    violations
 }
