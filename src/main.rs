@@ -42,6 +42,7 @@ fn main() {
 
         let mut walker = repo.revwalk().expect("unwrap revwalk");
         walker.push(oid.clone()).unwrap();
+        walker.set_sorting(git2::SORT_TIME);
 
         for r in walker {
             let r = r.expect("walker res");
@@ -105,8 +106,8 @@ fn analyze_commits(rules : &Vec<Rule>, commit_map : &HashMap<Oid, Vec<String>>, 
 
                     let code = str::from_utf8(line.content());
 
+                    // if it's not utf8, may its some kind of binary
                     if code.is_err() {
-                        println!("error on code");
                         continue;
                     }
 
