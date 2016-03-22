@@ -10,6 +10,8 @@ use git2::Repository;
 use git2::DiffFormat;
 use git2::DiffOptions;
 use git2::Oid;
+use git2::Branch;
+use git2::BranchType;
 use std::str;
 use std::collections::HashMap;
 use rule::Rule;
@@ -29,16 +31,26 @@ fn main() {
         Err(e) => panic!("failed to open: {}", e),
     };
 
-    for b in repo.branches(None).unwrap() {
-
-        let branch = b.unwrap();
-        let branch_name = branch.0.name().unwrap().unwrap().to_string();
+    // create a map that contains every startpoint
+    for b in repo.branches(Some(BranchType::Local)).unwrap() {
+        let branch = b.expect("unwrap branch");
+        let branch_name = branch.0.name().expect("unwrap branch name").expect("unwrap branch name 2").to_string();
 
         let reference = branch.0.get();
 
-        let oid = reference.target().unwrap();
+        let oid = reference.target().expect("unwrap branch iod");
 
-        add_commit_to_commit_map_by_reference(oid.clone(), &mut commit_map, branch_name, &repo);
+        let mut walker = repo.revwalk().expect("unwrap revwalk");
+        walker.push(oid.clone()).unwrap();
+
+        for r in walker {
+            let r = r.expect("walker res");
+            if !commit_map.contains_key(&r) {
+                commit_map.insert(r, vec![branch_name.clone()]);
+            } else {
+                commit_map.get_mut(&r).unwrap().push(branch_name.clone());
+            }
+        }
     }
 
     let violations = analyze_commits(&rules, &commit_map, &repo);
@@ -59,26 +71,7 @@ fn main() {
 
 }
 
-fn add_commit_to_commit_map_by_reference(
-    oid : Oid,
-    commit_map : &mut HashMap<Oid, Vec<String>>,
-    branch_name : String,
-    repo : &Repository
-)
-{
 
-    if !commit_map.contains_key(&oid) {
-        commit_map.insert(oid, vec![branch_name.clone()]);
-    } else {
-        commit_map.get_mut(&oid).unwrap().push(branch_name.clone());
-    }
-
-    let commit = repo.find_commit(oid.clone()).unwrap();
-
-    for pid in commit.parent_ids() {
-        add_commit_to_commit_map_by_reference(pid.clone(), commit_map, branch_name.clone(), &repo);
-    }
-}
 
 fn analyze_commits(rules : &Vec<Rule>, commit_map : &HashMap<Oid, Vec<String>>, repo : &Repository) -> Vec<Violation>
 {
@@ -86,43 +79,57 @@ fn analyze_commits(rules : &Vec<Rule>, commit_map : &HashMap<Oid, Vec<String>>, 
 
     for (oid, branches) in commit_map {
 
-        let commit = repo.find_commit(oid.clone()).unwrap();
+        let commit = repo.find_commit(oid.clone()).expect("unwrap find commit");
 
-        for parent in commit.parents() {
-            let mut diffopts = DiffOptions::new();
-            let diff = repo.diff_tree_to_tree(
-                Some(&parent.tree().unwrap()),
-                Some(&commit.tree().unwrap()),
-                Some(&mut diffopts)
-            ).unwrap();
+        // skip merges
+        if commit.parents().len() != 1 {
+            continue;
+        }
 
-            let _ = diff.print(DiffFormat::Patch, |delta, _hunk, line| {
-                if line.origin() == '+' {
-                    return true;
-                }
+        let parent = commit.parent(0).expect("find parent 0");
 
-                for rule in rules {
-                    for branch in branches {
-                        if rule.statify(
-                            delta.new_file().path().unwrap().to_string_lossy().to_string(),
-                            str::from_utf8(line.content()).unwrap().to_string(),
-                            "author".to_string(),
-                            branch.to_string()
-                        ) {
-                            violations.push(
-                                Violation::new(
-                                    rule.get_name(),
-                                    oid.clone(),
-                                    str::from_utf8(line.content()).unwrap().to_string()
-                                )
+        let mut diffopts = DiffOptions::new();
+        let diff = repo.diff_tree_to_tree(
+            Some(&parent.tree().expect("find parent tree")),
+            Some(&commit.tree().expect("find commit tree")),
+            Some(&mut diffopts)
+        ).unwrap();
+
+        let _ = diff.print(DiffFormat::Patch, |delta, _hunk, line| {
+            if line.origin() == '+' {
+                return true;
+            }
+
+            for rule in rules {
+                for branch in branches {
+
+                    let code = str::from_utf8(line.content());
+
+                    if code.is_err() {
+                        println!("error on code");
+                        continue;
+                    }
+
+                    if rule.statify(
+                        delta.new_file().path().expect("find path").to_string_lossy().to_string(),
+                        code.expect("find code").to_string(),
+                        "author".to_string(),
+                        branch.to_string()
+                    ) {
+                        violations.push(
+                            Violation::new(
+                                rule.get_name(),
+                                oid.clone(),
+                                code.expect("find code 2").to_string()
                             )
-                        }
+                        )
                     }
                 }
+            }
 
-                true
-            });
-        }
+            true
+        });
+
     }
 
     violations
