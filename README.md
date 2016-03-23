@@ -23,6 +23,10 @@ cargo install
 
 ## Example Configuration
 
+create a *paranoid.toml* in your root directory and run *git-paranoid*.
+right now every field is required and a regex.
+code, ignore_authors and ignore_branches are arrays.
+
 ```
 [dont_use_teardown_or_setup]
 path = 'test'
