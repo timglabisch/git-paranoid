@@ -2,6 +2,7 @@ extern crate git2;
 extern crate toml;
 extern crate regex;
 extern crate ansi_term;
+extern crate time;
 
 mod rule;
 mod violation;
@@ -45,7 +46,15 @@ fn main() {
         walker.set_sorting(git2::SORT_TIME);
 
         for r in walker {
+
             let r = r.expect("walker res");
+
+            let commit = repo.find_commit(r.clone()).expect("unwrap commit to find date");
+
+            if !((time::get_time().sec - commit.time().seconds()) <= 60*60*24*7) {
+                break;
+            }
+
             if !commit_map.contains_key(&r) {
                 commit_map.insert(r, vec![branch_name.clone()]);
             } else {
