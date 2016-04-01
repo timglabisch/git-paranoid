@@ -1,5 +1,5 @@
 [ownership_of_search]
 path = '.*'
-code = ['rule']
+code = ['analy']
 ignore_authors = ['timglabisch']
 ignore_branches = ['foo']

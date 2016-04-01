@@ -51,7 +51,7 @@ fn main() {
 
             let commit = repo.find_commit(r.clone()).expect("unwrap commit to find date");
 
-            if !((time::get_time().sec - commit.time().seconds()) <= 60*60*24*7) {
+            if !((time::get_time().sec - commit.time().seconds()) <= 60*60*24*700) {
                 break;
             }
 
@@ -63,19 +63,21 @@ fn main() {
         }
     }
 
-    let violations = analyze_commits(&rules, &commit_map, &repo);
+    let violationMap = analyze_commits(&rules, &commit_map, &repo);
 
-    for violation in violations {
-        println!(
-            "[{}] violates in {} on branch {}",
-            Colour::Red.bold().paint(violation.get_rule_name()),
-            Colour::Red.bold().paint(
-                format!("{}", violation.get_oid())
-            ),
-            commit_map.get(&violation.get_oid()).unwrap().join(",")
-        );
+    for (oid, violations) in violationMap {
 
-        println!("{}", violation.get_line());
+        println!("{} violates:", Colour::Red.bold().paint(format!("{}", oid)));
+        for violation in violations {
+            println!(
+                "{} on branch {}\n",
+                Colour::Red.bold().paint(violation.get_rule_name()),
+                Colour::Red.bold().paint(violation.get_branches().join(", "))
+            );
+
+            println!("{}", violation.get_code());
+        }
+
         println!("{}", "");
     }
 
@@ -83,9 +85,12 @@ fn main() {
 
 
 
-fn analyze_commits(rules : &Vec<Rule>, commit_map : &HashMap<Oid, Vec<String>>, repo : &Repository) -> Vec<Violation>
+fn analyze_commits(rules : &Vec<Rule>, commit_map : &HashMap<Oid, Vec<String>>, repo : &Repository)
+-> HashMap<Oid, Vec<Violation>>
 {
-    let mut violations = vec![];
+    let mut violations : HashMap<Oid, Vec<Violation>> = HashMap::new();
+
+    println!("{:?}", commit_map);
 
     for (oid, branches) in commit_map {
 
@@ -105,40 +110,69 @@ fn analyze_commits(rules : &Vec<Rule>, commit_map : &HashMap<Oid, Vec<String>>, 
             Some(&mut diffopts)
         ).unwrap();
 
-        let _ = diff.print(DiffFormat::Patch, |delta, _hunk, line| {
-            if line.origin() == '+' {
-                return true;
-            }
+        let mut additions : HashMap<String, String> = HashMap::new();
 
-            for rule in rules {
-                for branch in branches {
+        let diffres = diff.print(DiffFormat::Patch, |delta, _hunk, line| {
 
-                    let code = str::from_utf8(line.content());
+            let mut code = match str::from_utf8(line.content()) {
+                Ok(e) => e.to_string(),
+                _ => { return false }
+            };
 
-                    // if it's not utf8, may its some kind of binary
-                    if code.is_err() {
-                        continue;
-                    }
+            let filename = delta.new_file().path().expect("find path").to_string_lossy().to_string();
 
-                    if rule.statify(
-                        delta.new_file().path().expect("find path").to_string_lossy().to_string(),
-                        code.expect("find code").to_string(),
-                        "author".to_string(),
-                        branch.to_string()
-                    ) {
-                        violations.push(
-                            Violation::new(
-                                rule.get_name(),
-                                oid.clone(),
-                                code.expect("find code 2").to_string()
-                            )
-                        )
-                    }
+            if line.origin() == '+' || line.origin() == '-'  {
+                if !&additions.contains_key(&filename) {
+                    &additions.insert(filename.clone(), code.clone());
+                } else {
+                    &additions.get_mut(&filename).unwrap().push_str(&code.clone());
                 }
             }
 
             true
         });
+
+        for rule in rules {
+
+            let mut is_violation = false;
+            let mut violation_in_branches = vec![];
+
+            let mut violated_code = String::new();
+
+            for (filename, code) in &additions {
+                for branch in branches {
+                    if rule.statify(
+                        filename.to_string(),
+                        code.to_string(),
+                        "author".to_string(),
+                        branch.to_string()
+                    ) {
+                        is_violation = true;
+                        violated_code.push_str(code);
+                        if !violation_in_branches.contains(branch) {
+                            violation_in_branches.push(branch.to_string());
+                        }
+                    }
+                }
+            }
+
+            if is_violation {
+
+                let violation = Violation::new(
+                    rule.get_name(),
+                    oid.clone(),
+                    violation_in_branches,
+                    violated_code
+                );
+
+                if !violations.contains_key(&oid) {
+                    violations.insert(oid.clone(), vec![violation]);
+                } else {
+                    violations.get_mut(&oid).unwrap().push(violation);
+                }
+
+            }
+        }
 
     }
 

@@ -3,19 +3,22 @@ use git2::Oid;
 pub struct Violation {
     rule_name : String,
     oid : Oid,
-    line : String,
+    branches : Vec<String>,
+    code : String
 }
 
 impl Violation {
     pub fn new(
         rule_name : String,
         oid : Oid,
-        line : String
+        branches : Vec<String>,
+        code : String
     ) -> Violation {
         Violation {
             rule_name: rule_name,
             oid: oid,
-            line: line
+            branches: branches,
+            code: code
         }
     }
 
@@ -27,7 +30,11 @@ impl Violation {
         self.rule_name.clone()
     }
 
-    pub fn get_line(&self) -> String {
-        self.line.clone()
+    pub fn get_branches(&self) -> Vec<String> {
+        self.branches.clone()
+    }
+
+    pub fn get_code(&self) -> String {
+        self.code.clone()
     }
 }
